@@ -1,21 +1,25 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <ctype.h>
 #include "funcoes.h"
 
 int main() {
-    struct dados_pedido pedidos[200];
+    struct dados_pedido *pedidos = NULL;
     int total_pedidos = 0;
+    int capacidade = 0;
+
     struct cupom_desconto cupons[MAX_CUPONS];
     inicializar_cupons(cupons);
 
-    carregar_pedidos(pedidos, &total_pedidos);
+    // Carrega os pedidos existentes do arquivo binário para o vetor dinamicamente alocado
+    if (!carregar_pedidos(&pedidos, &total_pedidos, &capacidade)) {
+        printf("Nenhum pedido anterior carregado ou erro na leitura.\n");
+    }
 
     int continuar_programa = 1;
 
     do {
-        top_bottom();
         int mesa = ler_inteiro_seguro("Numero da mesa (1-50): ", 1, 50);
         int pessoas = ler_inteiro_seguro("Quantidade de pessoas na mesa (1-20): ", 1, 20);
 
@@ -38,6 +42,17 @@ int main() {
 
             tipo = ler_inteiro_seguro("Tipo do item (1 = Comida, 2 = Bebida): ", 1, 2);
             qtd = ler_inteiro_seguro("Quantidade: ", 1, 1000);
+
+            if (total_pedidos >= capacidade) {
+                capacidade = (capacidade == 0) ? 10 : capacidade * 2;
+                struct dados_pedido *temp_ptr = realloc(pedidos, capacidade * sizeof(struct dados_pedido));
+                if (temp_ptr == NULL) {
+                    printf("Erro de alocacao de memoria.\n");
+                    free(pedidos);
+                    return 1;
+                }
+                pedidos = temp_ptr;
+            }
 
             registrar_e_salvar(pedidos, &total_pedidos, mesa, pessoas, item, tipo, qtd, "", 0.0);
 
@@ -91,9 +106,11 @@ int main() {
             }
 
             FILE *arquivo = fopen(ARQUIVO_BINARIO, "wb");
-            if (arquivo) {
+            if (arquivo != NULL) {
                 fwrite(pedidos, sizeof(struct dados_pedido), total_pedidos, arquivo);
                 fclose(arquivo);
+            } else {
+                printf("\033[1;31mErro ao salvar os pedidos no arquivo.\033[0m\n");
             }
         }
 
@@ -117,5 +134,6 @@ int main() {
         gerar_relatorio_final();
     }
 
+    free(pedidos);
     return 0;
 }

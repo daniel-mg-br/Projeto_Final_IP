@@ -1,28 +1,37 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <ctype.h>
 #include "funcoes.h"
 
+// Imprime uma linha intermediária para separar conteúdos
 void mid_line() {
-    printf("---------------------------------------------------------------\n");
+    printf("-----------------------------------------------------\n");
 }
 
+// Imprime uma linha superior/inferior de destaque
 void top_bottom() {
-    printf("===============================================================\n");
+    printf("=====================================================\n");
 }
 
+// Inicializa o vetor de cupons com códigos e porcentagens fixas
 void inicializar_cupons(struct cupom_desconto cupons[]) {
-    strcpy(cupons[0].codigo, "paulo");
-    cupons[0].porcentagem = 0.20f;
-    strcpy(cupons[1].codigo, "daniel");
-    cupons[1].porcentagem = 0.30f;
-    strcpy(cupons[2].codigo, "pedro");
-    cupons[2].porcentagem = 0.40f;
-    strcpy(cupons[3].codigo, "lizandro");
-    cupons[3].porcentagem = 0.50f;
-    strcpy(cupons[4].codigo, "gean");
-    cupons[4].porcentagem = 0.60f;
+    strcpy(cupons[0].codigo, "paulo"); cupons[0].porcentagem = 0.20f;
+    strcpy(cupons[1].codigo, "daniel"); cupons[1].porcentagem = 0.30f;
+    strcpy(cupons[2].codigo, "pedro"); cupons[2].porcentagem = 0.40f;
+    strcpy(cupons[3].codigo, "lizandro"); cupons[3].porcentagem = 0.50f;
+    strcpy(cupons[4].codigo, "gean"); cupons[4].porcentagem = 0.60f;
+}
+
+// Valida se o código do cupom é válido e define a porcentagem correspondente
+int aplicar_cupom(char codigo[], struct cupom_desconto cupons[], float *desconto) {
+    for (int i = 0; i < MAX_CUPONS; i++) {
+        if (strcasecmp(codigo, cupons[i].codigo) == 0) {
+            *desconto = cupons[i].porcentagem;
+            return 1;
+        }
+    }
+    return 0;
 }
 
 // Lê e valida um inteiro dentro de um intervalo
@@ -78,16 +87,8 @@ int validar_nome_item(const char *str) {
     return 1;
 }
 
-int aplicar_cupom(char codigo[], struct cupom_desconto cupons[], float *desconto) {
-    for (int i = 0; i < MAX_CUPONS; i++) {
-        if (strcasecmp(codigo, cupons[i].codigo) == 0) {
-            *desconto = cupons[i].porcentagem;
-            return 1;
-        }
-    }
-    return 0;
-}
 
+// Registra o pedido na memória e salva no arquivo binário
 void registrar_e_salvar(struct dados_pedido *vetor, int *total_pedidos, int mesa, int pessoas,
                         char item[], int tipo, int qtd_item, const char *cupom, float desconto) {
     struct dados_pedido pedido;
@@ -111,27 +112,39 @@ void registrar_e_salvar(struct dados_pedido *vetor, int *total_pedidos, int mesa
     (*total_pedidos)++;
 
     FILE *arquivo = fopen(ARQUIVO_BINARIO, "ab");
-    if (arquivo) {
+    if (arquivo != NULL) {
         fwrite(&pedido, sizeof(struct dados_pedido), 1, arquivo);
         fclose(arquivo);
     }
 }
 
-int carregar_pedidos(struct dados_pedido vetor[], int *total_pedidos) {
+// Carrega pedidos do arquivo binário para um vetor alocado dinamicamente
+int carregar_pedidos(struct dados_pedido **vetor, int *total_pedidos, int *capacidade) {
     FILE *arquivo = fopen(ARQUIVO_BINARIO, "rb");
-    if (!arquivo) {
-        *total_pedidos = 0;
+    if (arquivo == NULL) {
         return 0;
     }
-    int lidos = 0;
-    while (lidos < 200 && fread(&vetor[lidos], sizeof(struct dados_pedido), 1, arquivo) == 1) {
-        lidos++;
+
+    struct dados_pedido temp;
+    while (fread(&temp, sizeof(struct dados_pedido), 1, arquivo) == 1) {
+        if (*total_pedidos >= *capacidade) {
+            *capacidade = (*capacidade == 0) ? 10 : (*capacidade * 2);
+            struct dados_pedido *temp_ptr = realloc(*vetor, (*capacidade) * sizeof(struct dados_pedido));
+            if (temp_ptr == NULL) {
+                printf("Erro ao alocar memoria para carregar pedidos.\n");
+                fclose(arquivo);
+                return 0;
+            }
+            *vetor = temp_ptr;
+        }
+        (*vetor)[(*total_pedidos)++] = temp;
     }
+
     fclose(arquivo);
-    *total_pedidos = lidos;
-    return lidos;
+    return 1;
 }
 
+// Exibe os dados de um pedido formatadamente
 void exibir_pedido(struct dados_pedido p, int eh_relatorio) {
     printf("Mesa %d | Pessoas: %d\n", p.mesa, p.pessoas);
     printf("Item: %s (%dx) [%s]\n", p.item, p.quantidade, (p.tipo == 1 ? "Comida" : "Bebida"));
@@ -143,11 +156,13 @@ void exibir_pedido(struct dados_pedido p, int eh_relatorio) {
     mid_line();
 }
 
+// Gera o relatório geral do sistema com total por mesa e ranking de vendas
 void gerar_relatorio_final() {
-    struct dados_pedido pedidos[200];
+    struct dados_pedido *pedidos = NULL;
     int total_pedidos = 0;
+    int capacidade = 0;
 
-    if (!carregar_pedidos(pedidos, &total_pedidos)) {
+    if (!carregar_pedidos(&pedidos, &total_pedidos, &capacidade)) {
         printf("Nenhum pedido registrado ainda.\n");
         return;
     }
@@ -199,8 +214,11 @@ void gerar_relatorio_final() {
 
     gerar_ranking(pedidos, total_pedidos);
     calcular_subtotal_por_tipo(pedidos, total_pedidos);
+
+    free(pedidos);
 }
 
+// Calcula totais gerais: arrecadação, média por mesa e total de itens
 void calcular_metricas_gerais(struct dados_pedido pedidos[], int total_pedidos) {
     float total_arrecadado = 0;
     int total_itens = 0;
@@ -227,6 +245,7 @@ void calcular_metricas_gerais(struct dados_pedido pedidos[], int total_pedidos) 
     top_bottom();
 }
 
+// Separa e exibe o subtotal arrecadado por tipo (comida ou bebida)
 void calcular_subtotal_por_tipo(struct dados_pedido pedidos[], int total_pedidos) {
     float total_comidas = 0, total_bebidas = 0;
     for (int i = 0; i < total_pedidos; i++) {
@@ -241,8 +260,14 @@ void calcular_subtotal_por_tipo(struct dados_pedido pedidos[], int total_pedidos
     top_bottom();
 }
 
+// Cria ranking dos itens mais vendidos com base na quantidade
 void gerar_ranking(struct dados_pedido pedidos[], int total_pedidos) {
-    struct item_ranking { char nome[50]; int quantidade; float subtotal; } ranking[50];
+    struct item_ranking {
+        char nome[50];
+        int quantidade;
+        float subtotal;
+    } ranking[50];
+
     int n_itens = 0;
     for (int i = 0; i < total_pedidos; i++) {
         int encontrado = 0;
@@ -261,6 +286,7 @@ void gerar_ranking(struct dados_pedido pedidos[], int total_pedidos) {
             n_itens++;
         }
     }
+
     for (int i = 0; i < n_itens - 1; i++) {
         for (int j = i + 1; j < n_itens; j++) {
             if (ranking[j].quantidade > ranking[i].quantidade) {
@@ -270,6 +296,7 @@ void gerar_ranking(struct dados_pedido pedidos[], int total_pedidos) {
             }
         }
     }
+
     printf("\n=== TOP 5 ITENS MAIS VENDIDOS ===\n");
     top_bottom();
     for (int i = 0; i < (n_itens < 5 ? n_itens : 5); i++) {
