@@ -2,16 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include "func_restaurante.h"
 #include "funcoes.h"
 
 // Imprime uma linha intermediária para separar conteúdos
 void mid_line() {
-    printf("-----------------------------------------------------\n");
+    printf("----------------------------------------------------------\n");
 }
 
 // Imprime uma linha superior/inferior de destaque
 void top_bottom() {
-    printf("=====================================================\n");
+    printf("==========================================================\n");
 }
 
 // Inicializa o vetor de cupons com códigos e porcentagens fixas
@@ -38,17 +39,24 @@ int aplicar_cupom(char codigo[], struct cupom_desconto cupons[], float *desconto
 int ler_inteiro_seguro(const char *mensagem, int min, int max) {
     char entrada[100];
     int valor;
+
     while (1) {
-        printf("%s", mensagem);
-        fgets(entrada, sizeof(entrada), stdin);
+        printf("%s ", mensagem);
+
+        if (!fgets(entrada, sizeof(entrada), stdin)) {
+            clearerr(stdin);
+            continue;
+        }
+
+        entrada[strcspn(entrada, "\n")] = '\0';
 
         if (sscanf(entrada, "%d", &valor) != 1) {
-            printf("\033[1;31mEntrada invalida! Digite um numero inteiro.\033[0m\n");
+            printf("\033[1;31mErro: Digite um número válido!\033[0m\n");
             continue;
         }
 
         if (valor < min || valor > max) {
-            printf("\033[1;31mValor fora do intervalo permitido (%d a %d).\033[0m\n", min, max);
+            printf("\033[1;31mErro: Valor deve estar entre %d e %d!\033[0m\n", min, max);
             continue;
         }
 
@@ -56,20 +64,21 @@ int ler_inteiro_seguro(const char *mensagem, int min, int max) {
     }
 }
 
+
+
 // Valida entrada s/n com tratamento de erro
 int validar_resposta_sn(const char *mensagem) {
-    char entrada[10];
     char resposta;
+    int c;
+
     do {
         printf("%s (s/n): ", mensagem);
-        fgets(entrada, sizeof(entrada), stdin);
 
-        if (sscanf(entrada, " %c", &resposta) != 1) {
-            printf("\033[1;31mEntrada invalida! Digite 's' ou 'n'.\033[0m\n");
-            continue;
-        }
+        resposta = getchar();
+        while ((c = getchar()) != '\n' && c != EOF);  // Limpa o restante da linha
 
         resposta = tolower(resposta);
+
         if (resposta != 's' && resposta != 'n') {
             printf("\033[1;31mOpcao invalida! Digite 's' ou 'n'.\033[0m\n");
         }
@@ -79,6 +88,9 @@ int validar_resposta_sn(const char *mensagem) {
     return (resposta == 's');
 }
 
+
+
+
 // Valida se uma string contém apenas letras e espaços
 int validar_nome_item(const char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
@@ -87,36 +99,71 @@ int validar_nome_item(const char *str) {
     return 1;
 }
 
+Cardapio* buscar_item_cardapio(int posicao, Cardapio *cardapio, int total_itens) {
+    if (posicao < 1 || posicao > total_itens) {
+        printf("\033[1;31mErro: Posicao %d invalida no cardapio!\033[0m\n", posicao);
+        return NULL;
+    }
+    return &cardapio[posicao - 1]; // Ajuste para índice 0-based
+}
 
 // Registra o pedido na memória e salva no arquivo binário
-void registrar_e_salvar(struct dados_pedido *vetor, int *total_pedidos, int mesa, int pessoas,
-                        char item[], int tipo, int qtd_item, const char *cupom, float desconto) {
-    struct dados_pedido pedido;
-    pedido.mesa = mesa;
-    pedido.pessoas = pessoas;
-    strncpy(pedido.item, item, sizeof(pedido.item));
-    pedido.item[sizeof(pedido.item) - 1] = '\0';
-    pedido.tipo = tipo;
-    pedido.quantidade = qtd_item;
+void registrar_e_salvar(
+    struct dados_pedido **vetor,       // ponteiro duplo
+    int *total_pedidos,
+    int *capacidade,
+    int mesa,
+    int pessoas,
+    int posicao_item,
+    Cardapio *cardapio,
+    int total_itens_cardapio,
+    int quantidade,
+    const char *cupom,
+    float desconto) {
+    
+    if (!cardapio || posicao_item < 1 || posicao_item > total_itens_cardapio) {
+        printf("\033[1;31mErro: Item invalido ou cardapio nao carregado!\033[0m\n");
+        return;
+    }
 
-    float valor_comida = 30.0;
-    float valor_bebida = 5.0;
-    pedido.subtotal = (tipo == 1) ? qtd_item * valor_comida : qtd_item * valor_bebida;
-    pedido.valor_individual = pedido.subtotal / pessoas;
+    // Realocar vetor se necessário
+    if (*total_pedidos >= *capacidade) {
+        *capacidade = (*capacidade == 0) ? 10 : (*capacidade * 2);
+        struct dados_pedido *temp = realloc(*vetor, (*capacidade) * sizeof(struct dados_pedido));
+        if (!temp) {
+            printf("\033[1;31mErro ao realocar memoria para pedidos!\033[0m\n");
+            return;
+        }
+        *vetor = temp;
+    }
 
-    strncpy(pedido.cupom, cupom, sizeof(pedido.cupom));
-    pedido.cupom[sizeof(pedido.cupom) - 1] = '\0';
-    pedido.desconto = desconto;
+    Cardapio *item = &cardapio[posicao_item - 1];  // índice ajustado
 
-    vetor[*total_pedidos] = pedido;
+    struct dados_pedido pedido = {
+        .mesa = mesa,
+        .pessoas = pessoas,
+        .tipo = item->tipo,
+        .quantidade = quantidade,
+        .subtotal = quantidade * item->valor,
+        .valor_individual = (quantidade * item->valor) / (pessoas > 0 ? pessoas : 1),
+        .desconto = desconto
+    };
+
+    strncpy(pedido.item, item->item, sizeof(pedido.item) - 1);
+    strncpy(pedido.cupom, cupom, sizeof(pedido.cupom) - 1);
+
+    (*vetor)[*total_pedidos] = pedido;
     (*total_pedidos)++;
 
     FILE *arquivo = fopen(ARQUIVO_BINARIO, "ab");
-    if (arquivo != NULL) {
+    if (arquivo) {
         fwrite(&pedido, sizeof(struct dados_pedido), 1, arquivo);
         fclose(arquivo);
+    } else {
+        printf("\033[1;31mErro ao salvar pedido no arquivo!\033[0m\n");
     }
 }
+
 
 // Carrega pedidos do arquivo binário para um vetor alocado dinamicamente
 int carregar_pedidos(struct dados_pedido **vetor, int *total_pedidos, int *capacidade) {
@@ -147,7 +194,7 @@ int carregar_pedidos(struct dados_pedido **vetor, int *total_pedidos, int *capac
 // Exibe os dados de um pedido formatadamente
 void exibir_pedido(struct dados_pedido p, int eh_relatorio) {
     printf("Mesa %d | Pessoas: %d\n", p.mesa, p.pessoas);
-    printf("Item: %s (%dx) [%s]\n", p.item, p.quantidade, (p.tipo == 1 ? "Comida" : "Bebida"));
+    printf("Item: %s (%dx) [%s]\n", p.item, p.quantidade, tipo_str(p.tipo)); // Usa tipo_str do colega
     printf("Subtotal: R$%.2f\n", p.subtotal);
     if (strlen(p.cupom) > 0 && !eh_relatorio) {
         printf("CUPOM %s APLICADO (%.0f%% OFF)\n", p.cupom, p.desconto * 100);
@@ -247,16 +294,22 @@ void calcular_metricas_gerais(struct dados_pedido pedidos[], int total_pedidos) 
 
 // Separa e exibe o subtotal arrecadado por tipo (comida ou bebida)
 void calcular_subtotal_por_tipo(struct dados_pedido pedidos[], int total_pedidos) {
-    float total_comidas = 0, total_bebidas = 0;
+    float total_pratos = 0, total_bebidas = 0, total_sobremesas = 0;
+
     for (int i = 0; i < total_pedidos; i++) {
-        if (pedidos[i].tipo == 1) total_comidas += pedidos[i].subtotal;
-        else total_bebidas += pedidos[i].subtotal;
+        switch(pedidos[i].tipo) {
+            case 0: total_pratos += pedidos[i].subtotal; break;
+            case 1: total_bebidas += pedidos[i].subtotal; break;
+            case 2: total_sobremesas += pedidos[i].subtotal; break;
+        }
     }
+
     printf("\n=== SUBTOTAL POR CATEGORIA ===\n");
     top_bottom();
-    printf("COMIDAS: R$ %8.2f\n", total_comidas);
-    printf("BEBIDAS: R$ %8.2f\n", total_bebidas);
-    printf("TOTAL  : R$ %8.2f\n", total_comidas + total_bebidas);
+    printf("PRATOS:     R$ %8.2f\n", total_pratos);
+    printf("BEBIDAS:    R$ %8.2f\n", total_bebidas);
+    printf("SOBREMESAS: R$ %8.2f\n", total_sobremesas);
+    printf("TOTAL:      R$ %8.2f\n", total_pratos + total_bebidas + total_sobremesas);
     top_bottom();
 }
 
