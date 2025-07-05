@@ -1,6 +1,6 @@
 Descrição
 
-O objetivo deste projeto é desenvolver um sistema em linguagem C para gerenciar pedidos de um restaurante. O sistema permitirá o cadastro de pratos do menu, o registro dos pedidos feitos pelos clientes, o cálculo do valor total da conta e a geração de um relatório diário de vendas. Todas as informações de pedidos deverão ser armazenadas em um arquivo binário para garantir a persistência dos dados.
+Este é o projeto final da disciplina de Introdução à Programação (UFG). O objetivo foi desenvolver um sistema em linguagem C para gerenciar pedidos de um restaurante (fictício). O sistema permitirá o cadastro de pratos do menu, o registro dos pedidos feitos pelos clientes, o cálculo do valor total da conta e a geração de um relatório diário de vendas. Todas as informações de pedidos deverão ser armazenadas em um arquivo binário para garantir a persistência dos dados.
 
 Funcionalidades Requeridas:
 
